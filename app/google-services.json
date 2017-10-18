@@ -1,0 +1,42 @@
+{
+  "project_info": {
+    "project_number": "163595258171",
+    "firebase_url": "https://colorobserver.firebaseio.com",
+    "project_id": "colorobserver",
+    "storage_bucket": "colorobserver.appspot.com"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:163595258171:android:c3044cb9bdc8b980",
+        "android_client_info": {
+          "package_name": "com.plweegie.colorobserver"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "163595258171-jifkeg67hc6cek1u4noiitm6v4godvd2.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDhGNjqTQz8MEwglV2LWzXuuVF6yovo-CI"
+        }
+      ],
+      "services": {
+        "analytics_service": {
+          "status": 1
+        },
+        "appinvite_service": {
+          "status": 1,
+          "other_platform_oauth_client": []
+        },
+        "ads_service": {
+          "status": 2
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
