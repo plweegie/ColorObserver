@@ -107,7 +107,7 @@ class _MyHomePageState extends State<MyHomePage> {
       );
     }
   }
-
+  
   @override
   void initState() {
     super.initState();
@@ -209,18 +209,28 @@ class ColorEntryListItem extends StatelessWidget {
   Widget build(BuildContext context) {
     return new Padding(
       padding: new EdgeInsets.all(8.0),
-      child: new Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+      child: new Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
         children: <Widget>[
-          new Text(entry.hue.toString()),
-          new Text(entry.saturation.toString()),
-          new Text(entry.intensity.toString()),
-          new Text(
-            entry.hsvColor,
-            style: new TextStyle(
-              fontWeight: FontWeight.bold,
-              color: kColorMappings[entry.hsvColor],
-            ),
+          new Container(
+            margin: const EdgeInsets.only(right: 16.0),
+            color: kColorMappings[entry.hsvColor],
+            width: 48.0,
+            height: 48.0,
+          ),
+          new Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: <Widget>[
+              new Text("Hue: " + entry.hue.toString()),
+              new Text("Saturation: " + entry.saturation.toString()),
+              new Text("Intensity: " + entry.intensity.toString()),
+              new Text(
+                entry.hsvColor,
+                style: new TextStyle(
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ]
           ),
         ]
       ),
