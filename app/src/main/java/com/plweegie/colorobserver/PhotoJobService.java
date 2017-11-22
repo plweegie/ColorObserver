@@ -24,15 +24,24 @@ import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
 import android.media.Image;
 import android.media.ImageReader;
+import android.net.Uri;
 import android.os.Handler;
 import android.os.HandlerThread;
+import android.support.annotation.NonNull;
 import android.util.Base64;
 import android.util.Log;
 
+import com.google.android.gms.tasks.OnFailureListener;
+import com.google.android.gms.tasks.OnSuccessListener;
 import com.google.firebase.database.DatabaseReference;
 import com.google.firebase.database.FirebaseDatabase;
 import com.google.firebase.database.ServerValue;
+import com.google.firebase.storage.FirebaseStorage;
+import com.google.firebase.storage.StorageReference;
+import com.google.firebase.storage.UploadTask;
 
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
 import java.nio.ByteBuffer;
 
 import boofcv.alg.color.ColorHsv;
@@ -49,6 +58,7 @@ import static android.content.ContentValues.TAG;
 public class PhotoJobService extends JobService {
 
     private FirebaseDatabase mDatabase;
+    private FirebaseStorage mStorage;
     private PicoCamera mCamera;
     private ImageReader.OnImageAvailableListener mOnImageAvailableListener;
 
@@ -83,6 +93,7 @@ public class PhotoJobService extends JobService {
         }
 
         mDatabase = FirebaseDatabase.getInstance();
+        mStorage = FirebaseStorage.getInstance();
 
         // Creates new handlers and associated threads for camera and networking operations.
         mCameraThread = new HandlerThread("CameraBackground");
@@ -127,11 +138,17 @@ public class PhotoJobService extends JobService {
     private void onPictureTaken(final byte[] imageBytes) {
         if (imageBytes != null) {
             final DatabaseReference log = mDatabase.getReference("logs").push();
+            final StorageReference storageRef = mStorage.getReference(log.getKey());
 
             BitmapFactory.Options options = new BitmapFactory.Options();
             options.inSampleSize = 2;
             Bitmap imageBitmap = BitmapFactory.decodeByteArray(imageBytes, 0,
                     imageBytes.length, options);
+
+            ByteArrayOutputStream baos = new ByteArrayOutputStream();
+            imageBitmap.compress(Bitmap.CompressFormat.JPEG, 100, baos);
+            byte[] dataToStore = baos.toByteArray();
+            ByteArrayInputStream bais = new ByteArrayInputStream(dataToStore);
 
             String imageStr = Base64.encodeToString(imageBytes, Base64.NO_WRAP | Base64.URL_SAFE);
 
@@ -159,6 +176,25 @@ public class PhotoJobService extends JobService {
             log.child("hue").setValue(hueValue);
             log.child("saturation").setValue(saturationValue);
             Log.d(TAG, "Sent to Firebase");
+
+            //upload image to Firebase Storage
+            UploadTask upload = storageRef.putStream(bais);
+            upload.addOnFailureListener(new OnFailureListener() {
+                @Override
+                public void onFailure(@NonNull Exception e) {
+                    Log.e(TAG, "Upload failed for key " + log.getKey());
+                }
+            }).addOnSuccessListener(new OnSuccessListener<UploadTask.TaskSnapshot>() {
+                @Override
+                public void onSuccess(UploadTask.TaskSnapshot taskSnapshot) {
+                    Uri downloadUrl = taskSnapshot.getDownloadUrl();
+
+                    if (downloadUrl != null) {
+                        Log.d(TAG, "Sent to storage");
+                        Log.d(TAG, downloadUrl.toString());
+                    }
+                }
+            });
         }
         jobFinished(mParams, false);
         cleanUpAndReleaseCamera();
