@@ -43,21 +43,26 @@ import com.google.firebase.storage.UploadTask;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.nio.ByteBuffer;
+import java.util.List;
+import java.util.Random;
 
 import boofcv.alg.color.ColorHsv;
+import boofcv.alg.feature.detect.edge.CannyEdge;
+import boofcv.alg.feature.detect.edge.EdgeContour;
 import boofcv.android.ConvertBitmap;
+import boofcv.android.VisualizeImageData;
+import boofcv.factory.feature.detect.edge.FactoryEdgeDetectors;
 import boofcv.struct.image.GrayF32;
+import boofcv.struct.image.GrayS16;
+import boofcv.struct.image.GrayU8;
 import boofcv.struct.image.Planar;
 
 import static android.content.ContentValues.TAG;
 
-/**
- * Created by jan on 08/10/17.
- */
-
 public class PhotoJobService extends JobService {
 
     private FirebaseDatabase mDatabase;
+    private DatabaseReference mDbReference;
     private FirebaseStorage mStorage;
     private PicoCamera mCamera;
     private ImageReader.OnImageAvailableListener mOnImageAvailableListener;
@@ -94,6 +99,7 @@ public class PhotoJobService extends JobService {
 
         mDatabase = FirebaseDatabase.getInstance();
         mStorage = FirebaseStorage.getInstance();
+        mDbReference = mDatabase.getReference("logs").push();
 
         // Creates new handlers and associated threads for camera and networking operations.
         mCameraThread = new HandlerThread("CameraBackground");
@@ -137,67 +143,110 @@ public class PhotoJobService extends JobService {
      */
     private void onPictureTaken(final byte[] imageBytes) {
         if (imageBytes != null) {
-            final DatabaseReference log = mDatabase.getReference("logs").push();
-            final StorageReference storageRef = mStorage.getReference(log.getKey());
 
             BitmapFactory.Options options = new BitmapFactory.Options();
             options.inSampleSize = 2;
             Bitmap imageBitmap = BitmapFactory.decodeByteArray(imageBytes, 0,
                     imageBytes.length, options);
 
-            ByteArrayOutputStream baos = new ByteArrayOutputStream();
-            imageBitmap.compress(Bitmap.CompressFormat.JPEG, 100, baos);
-            byte[] dataToStore = baos.toByteArray();
-            ByteArrayInputStream bais = new ByteArrayInputStream(dataToStore);
+            String imageStr = Base64.encodeToString(imageBytes,
+                    Base64.NO_WRAP | Base64.URL_SAFE);
 
-            String imageStr = Base64.encodeToString(imageBytes, Base64.NO_WRAP | Base64.URL_SAFE);
-
-            Planar<GrayF32> boofImage = new Planar<GrayF32>(GrayF32.class,
-                    320, 240, 3);
-            Planar<GrayF32> hsvImage = new Planar<GrayF32>(GrayF32.class,
-                    320, 240, 3);
-
-            ConvertBitmap.bitmapToPlanar(imageBitmap, boofImage, GrayF32.class, null);
-            ColorHsv.rgbToHsv_F32(boofImage, hsvImage);
-            float intensityValue = hsvImage.getBand(2).get(160, 120);
-            float hueValue = hsvImage.getBand(0).get(160, 120);
-            Log.d(TAG, "Hue: " + String.valueOf(hueValue));
-            float saturationValue = hsvImage.getBand(1).get(160, 120);
-
-            //if image is uniformly gray, hue will be NaN and Firebase will complain
-            if (Float.isNaN(hueValue)) {
-                hueValue = -1.0f;
-            }
-
-            // upload image to Firebase
-            log.child("timestamp").setValue(ServerValue.TIMESTAMP);
-            log.child("image").setValue(imageStr);
-            log.child("intensity").setValue(intensityValue);
-            log.child("hue").setValue(hueValue);
-            log.child("saturation").setValue(saturationValue);
-            Log.d(TAG, "Sent to Firebase");
-
-            //upload image to Firebase Storage
-            UploadTask upload = storageRef.putStream(bais);
-            upload.addOnFailureListener(new OnFailureListener() {
-                @Override
-                public void onFailure(@NonNull Exception e) {
-                    Log.e(TAG, "Upload failed for key " + log.getKey());
-                }
-            }).addOnSuccessListener(new OnSuccessListener<UploadTask.TaskSnapshot>() {
-                @Override
-                public void onSuccess(UploadTask.TaskSnapshot taskSnapshot) {
-                    Uri downloadUrl = taskSnapshot.getDownloadUrl();
-
-                    if (downloadUrl != null) {
-                        Log.d(TAG, "Sent to storage");
-                        Log.d(TAG, downloadUrl.toString());
-                    }
-                }
-            });
+            sendToDb(imageBitmap, imageStr);
+            sendToStorage(imageBitmap);
         }
         jobFinished(mParams, false);
         cleanUpAndReleaseCamera();
+    }
+
+    private void sendToDb(Bitmap bitmap, String imgAsString) {
+
+        Planar<GrayF32> boofImage = new Planar<GrayF32>(GrayF32.class,
+                320, 240, 3);
+        Planar<GrayF32> hsvImage = new Planar<GrayF32>(GrayF32.class,
+                320, 240, 3);
+
+        ConvertBitmap.bitmapToPlanar(bitmap, boofImage, GrayF32.class, null);
+        ColorHsv.rgbToHsv_F32(boofImage, hsvImage);
+        float intensityValue = hsvImage.getBand(2).get(160, 120);
+        float hueValue = hsvImage.getBand(0).get(160, 120);
+        Log.d(TAG, "Hue: " + String.valueOf(hueValue));
+        float saturationValue = hsvImage.getBand(1).get(160, 120);
+
+        //if image is uniformly gray, hue will be NaN and Firebase will complain
+        if (Float.isNaN(hueValue)) {
+            hueValue = -1.0f;
+        }
+
+        // upload image to Firebase
+        mDbReference.child("timestamp").setValue(ServerValue.TIMESTAMP);
+        mDbReference.child("image").setValue(imgAsString);
+        mDbReference.child("intensity").setValue(intensityValue);
+        mDbReference.child("hue").setValue(hueValue);
+        mDbReference.child("saturation").setValue(saturationValue);
+        Log.d(TAG, "Sent to Firebase");
+    }
+
+    private void sendToStorage(Bitmap bitmap) {
+        final StorageReference storageRef = mStorage.getReference(mDbReference.getKey());
+
+        Bitmap bitmapToSend = detectEdges(bitmap);
+
+        ByteArrayOutputStream baos = new ByteArrayOutputStream();
+        bitmapToSend.compress(Bitmap.CompressFormat.JPEG, 100, baos);
+        byte[] dataToStore = baos.toByteArray();
+        ByteArrayInputStream bais = new ByteArrayInputStream(dataToStore);
+
+        //upload image to Firebase Storage
+        UploadTask upload = storageRef.putStream(bais);
+        upload.addOnFailureListener(new OnFailureListener() {
+            @Override
+            public void onFailure(@NonNull Exception e) {
+                Log.e(TAG, "Upload failed for key " + mDbReference.getKey());
+            }
+        }).addOnSuccessListener(new OnSuccessListener<UploadTask.TaskSnapshot>() {
+            @Override
+            public void onSuccess(UploadTask.TaskSnapshot taskSnapshot) {
+                Uri downloadUrl = taskSnapshot.getDownloadUrl();
+
+                if (downloadUrl != null) {
+                    Log.d(TAG, "Sent to storage");
+                    Log.d(TAG, downloadUrl.toString());
+                }
+            }
+        });
+    }
+
+    private Bitmap detectEdges(Bitmap bitmap) {
+
+        Random rand = new Random(234);
+
+        GrayU8 gray = new GrayU8(320, 240);
+        ConvertBitmap.bitmapToGray(bitmap, gray, GrayU8.class, null);
+
+        CannyEdge<GrayU8, GrayS16> canny = FactoryEdgeDetectors.canny(2, true,
+                true, GrayU8.class, GrayS16.class);
+        canny.process(gray, 0.03f, 0.09f, null);
+        List<EdgeContour> cannyContours = canny.getContours();
+
+        int[] rgb = new int[cannyContours.size()];
+
+        for(int i = 0; i < cannyContours.size(); i++) {
+            rgb[i] = rand.nextInt();
+        }
+
+        Bitmap outputBitmap = Bitmap.createBitmap(320, 240, Bitmap.Config.ARGB_8888);
+
+        VisualizeImageData.drawEdgeContours(cannyContours, rgb, outputBitmap, null);
+        return outputBitmap;
+
+//        Planar<GrayU8> outputImage = new Planar<GrayU8>(GrayU8.class, 320, 240,
+//                3);
+//        outputImage.setBand(0, gray);
+//        outputImage.setBand(1, edges);
+
+//        Bitmap outputBitmap = Bitmap.createBitmap(320, 240, Bitmap.Config.ALPHA_8);
+//        ConvertBitmap.multiToBitmap(outputImage, outputBitmap, null);
     }
 
     private void cleanUpAndReleaseCamera() {
