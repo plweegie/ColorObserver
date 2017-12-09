@@ -1,45 +1,45 @@
-from django.http import HttpResponse, JsonResponse
-from django.views.decorators.csrf import csrf_exempt
-from rest_framework.renderers import JSONRenderer
+from rest_framework import status
+from rest_framework.decorators import api_view
 from rest_framework.parsers import JSONParser
+from rest_framework.response import Response
+
 from .models import ColorMeasurement
 from .serializers import ColorSerializer
 
 
-@csrf_exempt
-def color_list(request):
+@api_view(['GET', 'POST'])
+def color_list(request, format=None):
     if request.method == 'GET':
         colors = ColorMeasurement.objects.all()
         serializer = ColorSerializer(colors, many=True)
-        return JsonResponse(serializer.data, safe=False)
+        return Response(serializer.data)
 
     elif request.method == 'POST':
         data = JSONParser.parse(request)
         serializer = ColorSerializer(data=data)
         if serializer.is_valid():
             serializer.save()
-            return JsonResponse(serializer.data, status=201)
-        return JsonResponse(serializer.errors, status=400)
+            return Response(serializer.data, status.HTTP_201_CREATED)
+        return Response(serializer.errors, status.HTTP_400_BAD_REQUEST)
 
 
-@csrf_exempt
-def color_detail(request, pk):
+@api_view(['GET', 'PUT', 'DELETE'])
+def color_detail(request, pk, format=None):
     try:
         color = ColorMeasurement.objects.get(pk=pk)
     except ColorMeasurement.DoesNotExist:
-        return HttpResponse(status=404)
+        return Response(status.HTTP_404_NOT_FOUND)
 
     if request.method == 'GET':
         serializer = ColorSerializer(color)
-        return JsonResponse(serializer.data)
+        return Response(serializer.data)
 
     elif request.method == 'PUT':
-        data = JSONParser.parse(request)
-        serializer = ColorSerializer(color, data=data)
+        serializer = ColorSerializer(color, data=request.data)
         if serializer.is_valid():
             serializer.save()
-            return JsonResponse(serializer.data)
+            return Response(serializer.data)
 
     elif request.method == 'DELETE':
         color.delete()
-        return HttpResponse(status=204)
+        return Response(status.HTTP_204_NO_CONTENT)
