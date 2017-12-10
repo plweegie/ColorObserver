@@ -4,8 +4,8 @@ from . import views
 
 app_name = 'cobsapp'
 urlpatterns = [
-    url('', views.color_list),
-    url('<int:pk>/', views.color_detail),
+    url(r'^colors/$', views.ColorList.as_view()),
+    url(r'^colors/(?P<pk>[0-9]+)$', views.ColorDetail.as_view()),
 ]
 
 urlpatterns = format_suffix_patterns(urlpatterns)
