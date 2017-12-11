@@ -6,4 +6,3 @@ class ColorMeasurement(models.Model):
     hue = models.FloatField()
     saturation = models.FloatField()
     intensity = models.FloatField()
-    bitmap_as_string = models.CharField(max_length=200)

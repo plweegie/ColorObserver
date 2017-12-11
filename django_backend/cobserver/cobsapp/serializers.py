@@ -5,4 +5,4 @@ from .models import ColorMeasurement
 class ColorSerializer(serializers.ModelSerializer):
     class Meta:
         model = ColorMeasurement
-        fields = ('id', 'hue', 'saturation', 'intensity', 'bitmap_as_string')
+        fields = ('id', 'created', 'hue', 'saturation', 'intensity')

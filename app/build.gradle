@@ -41,6 +41,10 @@ dependencies {
     implementation 'com.google.firebase:firebase-core:11.6.0'
     implementation 'com.google.firebase:firebase-database:11.6.0'
     implementation 'com.google.firebase:firebase-storage:11.6.0'
+
+    implementation 'com.google.code.gson:gson:2.8.2'
+    implementation 'com.squareup.retrofit2:retrofit:2.3.0'
+    implementation 'com.squareup.retrofit2:converter-gson:2.3.0'
     testImplementation 'junit:junit:4.12'
     compileOnly 'com.google.android.things:androidthings:0.6-devpreview'
 }

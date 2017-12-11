@@ -39,6 +39,9 @@ import com.google.firebase.database.ServerValue;
 import com.google.firebase.storage.FirebaseStorage;
 import com.google.firebase.storage.StorageReference;
 import com.google.firebase.storage.UploadTask;
+import com.plweegie.colorobserver.models.ColorMeasurement;
+import com.plweegie.colorobserver.rest.DjangoColorsAPI;
+import com.plweegie.colorobserver.rest.RestClient;
 
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
@@ -56,6 +59,10 @@ import boofcv.struct.image.GrayF32;
 import boofcv.struct.image.GrayS16;
 import boofcv.struct.image.GrayU8;
 import boofcv.struct.image.Planar;
+import okhttp3.ResponseBody;
+import retrofit2.Call;
+import retrofit2.Callback;
+import retrofit2.Response;
 
 import static android.content.ContentValues.TAG;
 
@@ -161,6 +168,9 @@ public class PhotoJobService extends JobService {
 
     private void sendToDb(Bitmap bitmap, String imgAsString) {
 
+        RestClient client = new RestClient();
+        DjangoColorsAPI service = client.getApiService();
+
         Planar<GrayF32> boofImage = new Planar<GrayF32>(GrayF32.class,
                 320, 240, 3);
         Planar<GrayF32> hsvImage = new Planar<GrayF32>(GrayF32.class,
@@ -178,13 +188,38 @@ public class PhotoJobService extends JobService {
             hueValue = -1.0f;
         }
 
-        // upload image to Firebase
-        mDbReference.child("timestamp").setValue(ServerValue.TIMESTAMP);
-        mDbReference.child("image").setValue(imgAsString);
-        mDbReference.child("intensity").setValue(intensityValue);
-        mDbReference.child("hue").setValue(hueValue);
-        mDbReference.child("saturation").setValue(saturationValue);
-        Log.d(TAG, "Sent to Firebase");
+        //create colormeasurement object
+        ColorMeasurement color = new ColorMeasurement();
+        color.setHue(hueValue);
+        color.setIntensity(intensityValue);
+        color.setSaturation(saturationValue);
+        color.setBitmapAsString(imgAsString);
+
+        // send image data to Django server
+        Call<ResponseBody> call = service.createColorEntry(color);
+        call.enqueue(new Callback<ResponseBody>() {
+            @Override
+            public void onResponse(Call<ResponseBody> call, Response<ResponseBody> response) {
+                if (response.isSuccessful()) {
+                    Log.d(TAG, "New data inserted " + response.toString());
+                } else {
+                    Log.d(TAG, "Bad request " + response.toString());
+                }
+            }
+
+            @Override
+            public void onFailure(Call<ResponseBody> call, Throwable t) {
+                Log.e(TAG, "Retrofit error " + t.getMessage());
+            }
+        });
+
+//        // upload image to Firebase
+//        mDbReference.child("timestamp").setValue(ServerValue.TIMESTAMP);
+//        mDbReference.child("image").setValue(imgAsString);
+//        mDbReference.child("intensity").setValue(intensityValue);
+//        mDbReference.child("hue").setValue(hueValue);
+//        mDbReference.child("saturation").setValue(saturationValue);
+//        Log.d(TAG, "Sent to Firebase");
     }
 
     private void sendToStorage(Bitmap bitmap) {
@@ -239,14 +274,6 @@ public class PhotoJobService extends JobService {
 
         VisualizeImageData.drawEdgeContours(cannyContours, rgb, outputBitmap, null);
         return outputBitmap;
-
-//        Planar<GrayU8> outputImage = new Planar<GrayU8>(GrayU8.class, 320, 240,
-//                3);
-//        outputImage.setBand(0, gray);
-//        outputImage.setBand(1, edges);
-
-//        Bitmap outputBitmap = Bitmap.createBitmap(320, 240, Bitmap.Config.ALPHA_8);
-//        ConvertBitmap.multiToBitmap(outputImage, outputBitmap, null);
     }
 
     private void cleanUpAndReleaseCamera() {
